@@ -4,10 +4,23 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nova-frontend</title>
+    <meta name="description" content="NOVA — offline AI storage optimizer. Inspect apt/dpkg clutter, run guardrail checks, and review the tamper-evident audit log." />
+    <meta name="color-scheme" content="dark light" />
+    <title>NOVA · Storage Optimizer</title>
+    <script>
+      // Runs before paint to avoid a flash of the wrong theme. Kept in sync
+      // with the storage key/logic in src/hooks/useTheme.ts.
+      (function () {
+        try {
+          var stored = localStorage.getItem('nova-theme')
+          var dark = stored ? stored === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
+          document.documentElement.classList.toggle('dark', dark)
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
