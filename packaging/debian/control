@@ -1,0 +1,22 @@
+Source: nova
+Section: utils
+Priority: optional
+Maintainer: NOVA Team <nova@example.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+
+Package: nova
+Architecture: all
+Depends: python3, python3-venv, ${misc:Depends}
+Description: Offline AI storage optimizer
+ NOVA scans a machine's local filesystem for reclaimable storage -
+ duplicate files, stale downloads, orphaned apt packages, superseded
+ kernels, and similar clutter - and recommends (or, with explicit
+ approval, applies) cleanup actions.
+ .
+ It runs entirely offline: no scanned file contents or metadata ever
+ leave the machine. Every action NOVA takes or recommends is written to
+ a local, tamper-evident, hash-chained audit log, and a set of
+ guardrails prevents it from ever touching sensitive system paths
+ (SSH keys, git internals, etc.), regardless of what the OS-level file
+ permissions would otherwise allow.

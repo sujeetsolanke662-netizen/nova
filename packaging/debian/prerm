@@ -1,0 +1,34 @@
+#!/bin/sh
+# prerm for nova
+#
+# Skeleton package script - see packaging/README.md for what's real here
+# vs. still stubbed. This has not yet been exercised via an actual
+# dpkg-deb build/install cycle.
+
+set -e
+
+case "$1" in
+    remove|deconfigure)
+        # Stop and disable cleanly before any package files are removed,
+        # so we never leave a systemd unit pointing at a half-removed
+        # install.
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl stop nova.service || true
+            systemctl disable nova.service || true
+        fi
+    ;;
+
+    upgrade|failed-upgrade)
+        # Leave the service running across an upgrade-in-place; the new
+        # postinst will reload/re-enable it as needed.
+    ;;
+
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

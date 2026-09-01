@@ -1,0 +1,73 @@
+#!/bin/sh
+# postinst for nova
+#
+# Skeleton package script - see packaging/README.md for what's real here
+# vs. still stubbed. This has not yet been exercised via an actual
+# dpkg-deb build/install cycle.
+
+set -e
+
+NOVA_USER=nova
+NOVA_GROUP=nova
+NOVA_HOME=/var/lib/nova
+NOVA_OPT=/opt/nova
+
+case "$1" in
+    configure)
+        # Create the dedicated unprivileged system user/group NOVA runs
+        # as, if it doesn't already exist. --system gives it a UID in the
+        # system range with no login/password; --no-create-home + an
+        # explicit nologin shell means it can't be used to log in
+        # interactively. This user should only ever be granted read
+        # access to whatever paths it's configured to scan (e.g. via
+        # supplementary group membership set up separately, not here) -
+        # never sudo/wheel/adm membership or other broad root access.
+        if ! getent passwd "$NOVA_USER" >/dev/null 2>&1; then
+            adduser --system --group --no-create-home \
+                --home "$NOVA_HOME" --shell /usr/sbin/nologin "$NOVA_USER"
+        fi
+
+        # /opt/nova holds the application code and venv, shipped by the
+        # package itself (owned by root; nova only needs read+execute,
+        # not write). Created here defensively in case a future build of
+        # this package doesn't ship it as a directory entry directly.
+        mkdir -p "$NOVA_OPT"
+        chown root:root "$NOVA_OPT"
+
+        # /var/lib/nova is where the tamper-evident audit log and any
+        # other persistent runtime state live - this is the one
+        # directory the nova user actually needs to write to.
+        mkdir -p "$NOVA_HOME"
+        chown "$NOVA_USER:$NOVA_GROUP" "$NOVA_HOME"
+        chmod 750 "$NOVA_HOME"
+
+        # Enable the service so it comes up on future boots, but
+        # deliberately don't start it now - starting a freshly installed
+        # service during postinst is surprising and NOVA touches the
+        # filesystem, so the user should start it explicitly once ready.
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload || true
+            systemctl enable nova.service || true
+        fi
+
+        echo ""
+        echo "NOVA installed. It is enabled but not yet running."
+        echo "Start it with:"
+        echo "    sudo systemctl start nova"
+        echo "Once started, the API will be reachable at http://127.0.0.1:8756"
+        echo "(dashboard packaging/wiring is not yet finished - see packaging/README.md)."
+        echo ""
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

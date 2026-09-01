@@ -1,0 +1,45 @@
+[Unit]
+Description=NOVA offline AI storage optimizer (backend API)
+After=network.target local-fs.target
+Wants=network.target
+
+[Service]
+Type=simple
+
+# Runs as a dedicated unprivileged system user, never as root. The "nova"
+# user/group must be created by the .deb postinst script before this unit
+# is started (see packaging/debian/postinst). That user should only be
+# granted read access to whatever directories NOVA is configured to scan
+# (e.g. via supplementary group membership or ACLs set up separately) -
+# it must NOT be added to sudo/wheel/adm or otherwise given broad root
+# access. NOVA's guardrails module also refuses to act on sensitive paths
+# regardless of what the OS-level permissions technically allow.
+User=nova
+Group=nova
+
+# Adjust this if the FastAPI app entrypoint moves. backend.app.main:app is
+# the entrypoint given WorkingDirectory=/opt/nova and the app code copied
+# to /opt/nova/backend (see packaging/README.md's local-testing steps).
+# Update ExecStart to match if the module path or port ever changes.
+WorkingDirectory=/opt/nova
+ExecStart=/opt/nova/venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8756
+
+Restart=on-failure
+RestartSec=5
+
+# No custom log file - stdout/stderr go to the systemd journal
+# (`journalctl -u nova`). The tamper-evident audit log is a separate,
+# application-level ledger (backend/app/audit_log.py) and is unaffected
+# by this setting.
+StandardOutput=journal
+StandardError=journal
+
+# Baseline hardening - safe defaults for a local-only backend service.
+# Tighten further once the real scan-target access pattern is nailed down.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/nova
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,70 @@
+# Protected path patterns for NOVA's sensitive-path guardrails.
+#
+# This is a hard safety gate: any path matching one of these patterns must
+# never be flagged for cleanup, added to a review queue, or auto-applied
+# against — regardless of what the scoring/recommendation logic decides.
+#
+# Each entry:
+#   pattern  - glob pattern, matched against the resolved absolute path.
+#              "**" matches across directory separators (matches "zero or
+#              more of anything"), so it is intentionally permissive/greedy
+#              rather than strict shell-glob semantics — when in doubt, this
+#              guardrail should over-match rather than under-match.
+#   category - short machine-readable grouping, used for filtering/demoing.
+#   reason   - human-readable explanation surfaced in the explainability UI.
+#
+# To extend: add a new entry under the relevant category (or a new one).
+# No code changes are required — guardrails.py loads this file at runtime.
+
+patterns:
+  # --- ssh_keys ---
+  - pattern: "~/.ssh/**"
+    category: ssh_keys
+    reason: "SSH keys and configuration — deleting or moving these can permanently lock you out of remote systems."
+
+  # --- gpg ---
+  - pattern: "~/.gnupg/**"
+    category: gpg
+    reason: "GPG keyring and secrets — required for signing/decryption; often irrecoverable if lost."
+
+  # --- git_internals ---
+  - pattern: "**/.git/**"
+    category: git_internals
+    reason: "Git internal object store and metadata — modifying or removing these can corrupt the repository's history."
+
+  # --- system ---
+  - pattern: "/etc/**"
+    category: system
+    reason: "System-wide configuration files — required for the OS and installed services to function correctly."
+  - pattern: "/boot/**"
+    category: system
+    reason: "Bootloader and kernel images — required for the system to start."
+  - pattern: "/sys/**"
+    category: system
+    reason: "Virtual kernel/hardware interface, not real files on disk — must never be modified by a cleanup tool."
+  - pattern: "/proc/**"
+    category: system
+    reason: "Virtual process/kernel interface, not real files on disk — must never be modified by a cleanup tool."
+  - pattern: "/usr/**"
+    category: system
+    reason: "System-installed programs, libraries, and shared resources — required for installed software to run."
+  - pattern: "/bin/**"
+    category: system
+    reason: "Essential system binaries required for basic system operation."
+  - pattern: "/sbin/**"
+    category: system
+    reason: "Essential system administration binaries required for basic system operation."
+  - pattern: "/lib/**"
+    category: system
+    reason: "Essential shared libraries required by system binaries."
+  - pattern: "/var/lib/**"
+    category: system
+    reason: "Persistent application and package-manager state — removing this can break installed software."
+
+  # --- encrypted_or_external_mounts ---
+  - pattern: "/media/**"
+    category: encrypted_or_external_mounts
+    reason: "Removable media mount point — may be encrypted, in use elsewhere, or otherwise outside NOVA's control."
+  - pattern: "/mnt/**"
+    category: encrypted_or_external_mounts
+    reason: "Externally mounted filesystem — may be encrypted, network-mounted, or shared with other systems."
