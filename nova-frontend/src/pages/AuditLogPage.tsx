@@ -3,14 +3,13 @@ import { useMemo, useState } from 'react'
 import { AuditLogTable } from '@/components/audit/AuditLogTable'
 import { ChainStatusBanner } from '@/components/audit/ChainStatusBanner'
 import { Button } from '@/components/ui/Button'
-import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews'
 import { useAuditLog } from '@/hooks/useNovaApi'
 
-type ActionFilter = 'all' | 'recommend' | 'guardrail_block'
+type ActionFilter = 'all' | 'recommend' | 'guardrail_block' | 'auto_apply' | 'quarantine' | 'restore'
 
 export function AuditLogPage() {
   const { data, isPending, isError, error, refetch, isFetching } = useAuditLog()
@@ -36,7 +35,7 @@ export function AuditLogPage() {
   return (
     <div>
       <PageHeader
-        title="Audit log"
+        title="Audit Log"
         description="Every recommendation and guardrail block NOVA has recorded, in a tamper-evident, append-only hash chain."
         actions={
           <Button variant="secondary" onClick={() => refetch()} disabled={isFetching}>
@@ -50,28 +49,29 @@ export function AuditLogPage() {
         <ChainStatusBanner />
       </div>
 
-      <Card>
-        <CardBody className="border-b border-slate-200 dark:border-slate-800">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[220px] flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search reason, path, or actor…"
-                className="w-full pl-9"
-                aria-label="Search audit log"
-              />
-            </div>
-            <Select value={action} onChange={(e) => setAction(e.target.value as ActionFilter)} aria-label="Filter by action type">
-              <option value="all">All actions</option>
-              <option value="recommend">Recommendations</option>
-              <option value="guardrail_block">Guardrail blocks</option>
-            </Select>
+      <div className="rounded-lg border border-border">
+        <div className="flex flex-wrap items-center gap-3 border-b border-border-faint px-4 py-2.5">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search reason, path, or actor…"
+              className="w-full pl-9"
+              aria-label="Search audit log"
+            />
           </div>
-        </CardBody>
+          <Select value={action} onChange={(e) => setAction(e.target.value as ActionFilter)} aria-label="Filter by action type">
+            <option value="all">All actions</option>
+            <option value="recommend">Recommendations</option>
+            <option value="guardrail_block">Guardrail blocks</option>
+            <option value="auto_apply">Auto-applied</option>
+            <option value="quarantine">Quarantine</option>
+            <option value="restore">Restore</option>
+          </Select>
+        </div>
 
-        <CardBody>
+        <div className="p-4">
           {isPending && <LoadingState label="Loading audit log…" />}
           {isError && (
             <ErrorState message={error instanceof Error ? error.message : 'Failed to load audit log.'} onRetry={() => refetch()} />
@@ -79,20 +79,24 @@ export function AuditLogPage() {
           {!isPending && !isError && filtered.length === 0 && (
             <EmptyState
               icon={ScrollText}
-              title="No entries match"
-              description={data && data.length > 0 ? 'Try clearing a filter.' : 'Nothing has been logged yet.'}
+              title={data && data.length > 0 ? 'No entries match' : 'Log is empty'}
+              description={
+                data && data.length > 0
+                  ? 'Try clearing a filter.'
+                  : 'Nothing has been recorded yet — entries appear here as NOVA recommends, acts, or blocks.'
+              }
             />
           )}
           {!isPending && !isError && filtered.length > 0 && (
             <>
-              <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+              <p className="mb-3 text-xs text-ink-muted">
                 {filtered.length} of {data?.length ?? 0} entries · click a row for hash details
               </p>
               <AuditLogTable entries={filtered} />
             </>
           )}
-        </CardBody>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }

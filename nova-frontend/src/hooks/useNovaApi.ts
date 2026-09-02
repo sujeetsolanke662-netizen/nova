@@ -34,3 +34,11 @@ export function useAuditLogVerify() {
     staleTime: 15_000,
   })
 }
+
+export function useQuarantineList() {
+  return useQuery({
+    queryKey: ['quarantine'],
+    queryFn: api.quarantineList,
+    staleTime: 10_000,
+  })
+}

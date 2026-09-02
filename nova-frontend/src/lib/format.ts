@@ -1,3 +1,5 @@
+import { Archive, Eye, Info, Minus, RotateCcw, ShieldAlert, Zap, type LucideIcon } from 'lucide-react'
+
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const
 
 export function formatBytes(bytes: number): string {
@@ -63,8 +65,99 @@ export function formatClutterCategory(category: string): string {
 const ACTION_TYPE_LABELS: Record<string, string> = {
   recommend: 'Recommendation',
   guardrail_block: 'Guardrail block',
+  auto_apply: 'Auto-applied',
+  quarantine: 'Quarantine',
+  restore: 'Restore',
 }
 
 export function formatActionType(actionType: string): string {
   return ACTION_TYPE_LABELS[actionType] ?? actionType.replace(/_/g, ' ')
+}
+
+type ActionBadgeTone = 'neutral' | 'brand' | 'auto' | 'success' | 'warning' | 'danger'
+
+// Canonical hierarchy (see Badge.tsx): recommend/keep are routine, quarantine
+// is a user-invoked action, auto_apply is the system acting on its own,
+// restore is a positive/reversible resolution, and guardrail_block is the
+// single highest-weight negative trust signal in the app.
+const ACTION_TYPE_TONES: Record<string, ActionBadgeTone> = {
+  recommend: 'neutral',
+  guardrail_block: 'danger',
+  auto_apply: 'auto',
+  quarantine: 'brand',
+  restore: 'success',
+}
+
+const ACTION_TYPE_ICONS: Record<string, LucideIcon> = {
+  recommend: Info,
+  guardrail_block: ShieldAlert,
+  auto_apply: Zap,
+  quarantine: Archive,
+  restore: RotateCcw,
+}
+
+export function actionTypeTone(actionType: string): ActionBadgeTone {
+  return ACTION_TYPE_TONES[actionType] ?? 'neutral'
+}
+
+export function actionTypeIcon(actionType: string): LucideIcon | undefined {
+  return ACTION_TYPE_ICONS[actionType]
+}
+
+const RECOMMENDED_ACTION_LABELS: Record<string, string> = {
+  auto_apply: 'Auto-apply',
+  review_recommended: 'Review',
+  keep: 'Keep',
+}
+
+export function formatRecommendedAction(action: string): string {
+  return RECOMMENDED_ACTION_LABELS[action] ?? action.replace(/_/g, ' ')
+}
+
+export function recommendedActionTone(action: string): ActionBadgeTone {
+  if (action === 'auto_apply') return 'auto'
+  if (action === 'review_recommended') return 'warning'
+  return 'neutral'
+}
+
+export function recommendedActionIcon(action: string): LucideIcon {
+  if (action === 'auto_apply') return Zap
+  if (action === 'review_recommended') return Eye
+  return Minus
+}
+
+export function formatPercent(value: number): string {
+  return `${value.toFixed(1)}%`
+}
+
+/** ISO-ish, fixed-width - built for a monospace log column, not prose. */
+export function formatLogTimestamp(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  )
+}
+
+/**
+ * Backend reason strings for recommend/auto_apply entries are semicolon-
+ * joined clauses (see recommendation.py's _build_reason): the first clause
+ * is the human "why", any trailing clauses are the staleness/duplicate/size
+ * breakdown. Splitting on that structural delimiter - rather than trying to
+ * regex specific field names out of free text - is what lets the Audit Log
+ * show a short primary reason with quiet secondary details underneath,
+ * without needing a backend schema change.
+ */
+export function splitReasonDetails(reason: string): { primary: string; details: string[] } {
+  const clauses = reason
+    .split(/;\s*/)
+    .map((c) => c.replace(/\.$/, '').trim())
+    .filter(Boolean)
+
+  if (clauses.length === 0) return { primary: reason, details: [] }
+  const [primary, ...details] = clauses
+  return { primary, details }
 }

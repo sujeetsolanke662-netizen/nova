@@ -1,7 +1,14 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
-import { formatActionType, formatDateTime, truncatePath } from '@/lib/format'
+import {
+  actionTypeIcon,
+  actionTypeTone,
+  formatActionType,
+  formatLogTimestamp,
+  splitReasonDetails,
+  truncatePath,
+} from '@/lib/format'
 import type { AuditLogEntry } from '@/types/nova'
 
 export function AuditLogTable({ entries }: { entries: AuditLogEntry[] }) {
@@ -18,49 +25,77 @@ export function AuditLogTable({ entries }: { entries: AuditLogEntry[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] text-left text-sm">
+      <table className="w-full min-w-[900px] text-left text-sm">
         <thead>
-          <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
-            <th className="w-8 py-2.5" />
-            <th className="py-2.5 pr-4 font-medium">Entry</th>
-            <th className="py-2.5 pr-4 font-medium">Action</th>
-            <th className="py-2.5 pr-4 font-medium">Reason</th>
-            <th className="py-2.5 pr-4 font-medium">Timestamp</th>
+          <tr className="border-b border-border text-[11px] font-medium tracking-wide text-ink-muted uppercase">
+            <th className="w-6 py-2" />
+            <th className="py-2 pr-4">Timestamp</th>
+            <th className="py-2 pr-4">Action</th>
+            <th className="py-2 pr-4">Path</th>
+            <th className="py-2 pr-4">Reason</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+        <tbody className="divide-y divide-border-faint">
           {entries.map((entry) => {
             const isOpen = expanded.has(entry.entry_id)
+            const primaryPath = entry.target_paths[0]
+            const isBlocked = entry.action_type === 'guardrail_block'
+            const { primary, details } = splitReasonDetails(entry.reason)
+
             return (
               <Fragment key={entry.entry_id}>
                 <tr
-                  className="cursor-pointer align-top hover:bg-slate-50 dark:hover:bg-slate-900/60"
+                  className="cursor-pointer align-top hover:bg-raised"
                   onClick={() => toggle(entry.entry_id)}
                 >
-                  <td className="py-3 pl-1 text-slate-400">
-                    {isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                  <td
+                    className={
+                      isBlocked
+                        ? 'border-l-2 border-l-danger py-2 pl-1 text-ink-dim'
+                        : 'py-2 pl-1 text-ink-dim'
+                    }
+                  >
+                    {isOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
                   </td>
-                  <td className="py-3 pr-4 font-mono text-xs text-slate-500 dark:text-slate-400">
-                    #{entry.entry_id}
+                  <td className="py-2 pr-4 whitespace-nowrap font-mono text-xs text-ink-muted">
+                    {formatLogTimestamp(entry.timestamp)}
                   </td>
-                  <td className="py-3 pr-4">
-                    <Badge tone={entry.action_type === 'guardrail_block' ? 'danger' : 'brand'}>
+                  <td className="py-2 pr-4">
+                    <Badge tone={actionTypeTone(entry.action_type)} icon={actionTypeIcon(entry.action_type)}>
                       {formatActionType(entry.action_type)}
                     </Badge>
                   </td>
-                  <td className="max-w-md py-3 pr-4 text-slate-700 dark:text-slate-200">{entry.reason}</td>
-                  <td className="py-3 pr-4 whitespace-nowrap text-slate-500 dark:text-slate-400">
-                    {formatDateTime(entry.timestamp)}
+                  <td className="max-w-[220px] truncate py-2 pr-4 font-mono text-xs text-ink-muted" title={primaryPath}>
+                    {primaryPath ? truncatePath(primaryPath, 40) : '—'}
+                    {entry.target_paths.length > 1 && (
+                      <span className="ml-1 text-ink-dim">+{entry.target_paths.length - 1}</span>
+                    )}
+                  </td>
+                  <td className="max-w-sm py-2 pr-4">
+                    <p className="truncate text-ink" title={primary}>
+                      {primary}
+                    </p>
+                    {details.length > 0 && (
+                      <p className="truncate text-xs text-ink-dim" title={details.join(' · ')}>
+                        {details.join(' · ')}
+                      </p>
+                    )}
                   </td>
                 </tr>
                 {isOpen && (
-                  <tr className="bg-slate-50 dark:bg-slate-900/60">
-                    <td />
-                    <td colSpan={4} className="space-y-2 py-3 pr-4 font-mono text-xs text-slate-500 dark:text-slate-400">
-                      <DetailRow label="Actor" value={entry.actor} />
-                      <DetailRow label="Target paths" value={entry.target_paths.map((p) => truncatePath(p, 72)).join(', ') || '—'} />
-                      <DetailRow label="Entry hash" value={entry.entry_hash} />
-                      <DetailRow label="Prev hash" value={entry.prev_hash} />
+                  <tr className="bg-raised">
+                    <td className={isBlocked ? 'border-l-2 border-l-danger' : undefined} />
+                    <td colSpan={4} className="py-3 pr-4">
+                      <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1.5 font-mono text-xs">
+                        <DetailRow label="Entry" value={`#${entry.entry_id}`} />
+                        <DetailRow label="Actor" value={entry.actor} />
+                        <DetailRow
+                          label="Target paths"
+                          value={entry.target_paths.map((p) => truncatePath(p, 80)).join(', ') || '—'}
+                        />
+                        <DetailRow label="Entry hash" value={entry.entry_hash} />
+                        <DetailRow label="Prev hash" value={entry.prev_hash} />
+                      </dl>
                     </td>
                   </tr>
                 )}
@@ -75,9 +110,9 @@ export function AuditLogTable({ entries }: { entries: AuditLogEntry[] }) {
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      <span className="text-slate-400 dark:text-slate-500">{label}:</span>
-      <span className="break-all text-slate-600 dark:text-slate-300">{value}</span>
-    </div>
+    <>
+      <dt className="text-ink-dim uppercase">{label}</dt>
+      <dd className="min-w-0 break-all text-ink-muted">{value}</dd>
+    </>
   )
 }

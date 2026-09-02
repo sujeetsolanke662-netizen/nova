@@ -2,8 +2,13 @@ import type {
   AuditLogEntry,
   AuditVerifyResponse,
   ClutterFinding,
+  CopilotAskResponse,
+  ForecastResponse,
   GuardrailsCheckResponse,
   HealthResponse,
+  QuarantineEntry,
+  RecommendationsResponse,
+  UsageSnapshot,
 } from '@/types/nova'
 
 /**
@@ -63,4 +68,38 @@ export const api = {
   auditLog: () => request<AuditLogEntry[]>('/api/audit-log'),
 
   auditLogVerify: () => request<AuditVerifyResponse>('/api/audit-log/verify'),
+
+  recommendations: (root: string) =>
+    request<RecommendationsResponse>(`/api/recommendations?${new URLSearchParams({ root })}`),
+
+  quarantineList: () => request<QuarantineEntry[]>('/api/quarantine'),
+
+  quarantineFile: (path: string, reason: string) =>
+    request<QuarantineEntry>('/api/quarantine', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, reason }),
+    }),
+
+  quarantineRestore: (quarantineId: string) =>
+    request<QuarantineEntry>(`/api/quarantine/${encodeURIComponent(quarantineId)}/restore`, {
+      method: 'POST',
+    }),
+
+  copilotAsk: (question: string, root: string) =>
+    request<CopilotAskResponse>('/api/copilot/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, root }),
+    }),
+
+  forecast: (path: string) =>
+    request<ForecastResponse>(`/api/forecast?${new URLSearchParams({ path })}`),
+
+  forecastSnapshot: (path: string) =>
+    request<UsageSnapshot>('/api/forecast/snapshot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    }),
 }

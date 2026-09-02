@@ -1,48 +1,58 @@
-import { LayoutDashboard, ScrollText, ShieldCheck, Trash2, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { HealthBadge } from '@/components/layout/HealthBadge'
 import { cn } from '@/lib/cn'
-
-const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/storage-cleanup', label: 'Storage cleanup', icon: Trash2, end: false },
-  { to: '/guardrails', label: 'Guardrails', icon: ShieldCheck, end: false },
-  { to: '/audit-log', label: 'Audit log', icon: ScrollText, end: false },
-] as const
+import { NAV_GROUPS } from '@/lib/navigation'
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <nav className="flex h-full flex-col gap-1 p-3" aria-label="Primary">
-      {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={end}
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300'
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100',
-            )
-          }
-        >
-          <Icon className="size-4.5" aria-hidden="true" />
-          {label}
-        </NavLink>
-      ))}
+    <nav className="flex h-full flex-col" aria-label="Primary">
+      <div className="flex-1 overflow-y-auto px-3 py-4">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.heading} className="mb-6 last:mb-0">
+            <p className="mb-2 px-3 text-[10px] font-semibold tracking-wider text-ink-muted uppercase">
+              {group.heading}
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {group.items.map(({ to, label, icon: Icon, end }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={end}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-raised text-accent-ink'
+                        : 'text-ink-muted hover:bg-raised hover:text-ink',
+                    )
+                  }
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden="true" />
+                  {label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-border-faint px-4 py-3">
+        <HealthBadge compact />
+      </div>
     </nav>
   )
 }
 
 export function MobileSidebarHeader({ onClose }: { onClose: () => void }) {
   return (
-    <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Menu</span>
+    <div className="flex items-center justify-between border-b border-border-faint px-4 py-3">
+      <span className="text-sm font-semibold text-ink">Menu</span>
       <button
         type="button"
         onClick={onClose}
-        className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        className="rounded-md p-1.5 text-ink-muted hover:bg-raised"
         aria-label="Close menu"
       >
         <X className="size-4.5" />

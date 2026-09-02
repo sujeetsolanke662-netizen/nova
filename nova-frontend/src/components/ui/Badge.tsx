@@ -1,36 +1,55 @@
 import type { HTMLAttributes } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
-type BadgeTone = 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'accent'
+/**
+ * Each tone maps to exactly one meaning app-wide - see lib/format.ts's
+ * actionTypeTone()/recommendedActionTone() for the canonical mapping:
+ *   neutral  - routine/informational (RECOMMENDATION, KEEP)
+ *   brand    - user-invoked action (QUARANTINE)
+ *   auto     - the system acted on its own, high confidence (AUTO-APPLIED)
+ *   success  - verified / safe / reversible (RESTORE, hash chain intact)
+ *   warning  - needs attention, unresolved (REVIEW, stale)
+ *   danger   - blocked / destructive (GUARDRAIL BLOCK)
+ *   nova     - Ask Nova / AI surfaces only
+ *
+ * brand and nova share the single accent hue (NOVA's design language keeps
+ * one accent, not a second brand color); auto shares the ok/success hue -
+ * both collapse to the same token pair below.
+ */
+export type BadgeTone = 'neutral' | 'brand' | 'auto' | 'success' | 'warning' | 'danger' | 'nova'
 
 const TONE_CLASSES: Record<BadgeTone, string> = {
-  neutral:
-    'bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700',
-  brand:
-    'bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200 dark:bg-brand-500/10 dark:text-brand-300 dark:ring-brand-500/30',
-  success:
-    'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30',
-  warning:
-    'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30',
-  danger:
-    'bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/30',
-  accent:
-    'bg-accent-500/10 text-accent-600 ring-1 ring-inset ring-accent-500/30 dark:text-accent-400',
+  neutral: 'bg-raised text-ink-muted ring-1 ring-inset ring-border',
+  brand: 'bg-accent-faint text-accent-ink ring-1 ring-inset ring-accent/30',
+  auto: 'bg-ok-faint text-ok ring-1 ring-inset ring-ok/30',
+  success: 'bg-ok-faint text-ok ring-1 ring-inset ring-ok/30',
+  warning: 'bg-warn-faint text-warn ring-1 ring-inset ring-warn/30',
+  danger: 'bg-danger-faint text-danger ring-1 ring-inset ring-danger/30',
+  nova: 'bg-accent-faint text-accent-ink ring-1 ring-inset ring-accent/30',
 }
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   tone?: BadgeTone
+  /** Compact system-status chip: uppercase, tighter tracking. Default true. */
+  chip?: boolean
+  /** Leading glyph so meaning never depends on color alone. */
+  icon?: LucideIcon
 }
 
-export function Badge({ tone = 'neutral', className, ...props }: BadgeProps) {
+export function Badge({ tone = 'neutral', chip = true, icon: Icon, className, children, ...props }: BadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+        'inline-flex items-center gap-1 rounded font-mono font-semibold',
+        chip ? 'px-1.5 py-0.5 text-[10px] tracking-wide uppercase' : 'px-2 py-0.5 text-xs',
         TONE_CLASSES[tone],
         className,
       )}
       {...props}
-    />
+    >
+      {Icon && <Icon className={chip ? 'size-2.5' : 'size-3'} aria-hidden="true" />}
+      {children}
+    </span>
   )
 }

@@ -30,20 +30,20 @@ export function GuardrailsPage() {
     <div>
       <PageHeader
         title="Guardrails"
-        description="Read-only inspection of NOVA's safety gate — check whether a path is protected, in scan scope, or reviewable before NOVA would ever act on it."
+        description="NOVA's safety gate, read-only — check whether a path is blocked, out of scope, or allowed before anything would ever act on it."
       />
 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="size-4 text-brand-600 dark:text-brand-400" />
-            Check a path
+            <ShieldCheck className="size-4 text-ink-dim" />
+            Path classifier
           </CardTitle>
         </CardHeader>
         <CardBody>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-2.5 sm:flex-row">
             <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
               <Input
                 value={path}
                 onChange={(e) => {
@@ -60,21 +60,21 @@ export function GuardrailsPage() {
             </Button>
           </form>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
             <span>Try:</span>
             {EXAMPLE_PATHS.map((example) => (
               <button
                 key={example}
                 type="button"
                 onClick={() => handleExample(example)}
-                className="rounded-md bg-slate-100 px-2 py-1 font-mono text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                className="rounded-md bg-raised px-2 py-1 font-mono text-ink-muted hover:bg-border-faint hover:text-ink"
               >
                 {example}
               </button>
             ))}
           </div>
 
-          <div className="mt-5">
+          <div className="mt-4">
             {isError && (
               <ErrorState
                 message={error instanceof Error ? error.message : 'Failed to check this path.'}
