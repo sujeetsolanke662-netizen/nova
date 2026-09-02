@@ -7,7 +7,7 @@ end-to-end.
 ## What each file is for
 
 - `systemd/nova.service` - the systemd unit that runs the FastAPI backend
-  (`uvicorn app.main:app`) as the unprivileged `nova` system user, restarts
+  (`uvicorn backend.app.main:app`) as the unprivileged `nova` system user, restarts
   it on failure, and sends its stdout/stderr to the journal. Does not touch
   the audit log (`backend/app/audit_log.py`), which is a separate,
   application-level, tamper-evident ledger written by NOVA itself, not by
@@ -60,13 +60,25 @@ Real:
   case-statement shape (`configure` / `remove,deconfigure` /
   `upgrade,failed-upgrade`) and are safe to read as a reference for how
   the real scripts should behave.
+- **`HF_HUB_OFFLINE=1`/`TRANSFORMERS_OFFLINE=1` are set as `Environment=`
+  lines on the unit.** NOVA Copilot's retrieval pipeline
+  (`backend/app/copilot_retrieval.py`) loads two sentence-transformers
+  models; without these, the underlying `huggingface_hub`/`transformers`
+  libraries will still probe the network (e.g. to check for a newer
+  cached revision) before falling back to the local cache. Systemd units
+  don't inherit whatever's exported in a login shell, so the vars have to
+  be set here explicitly - the offline claim in the top-level README needs
+  to hold no matter how the service is launched, not just when
+  `HF_HUB_OFFLINE` happens to already be set in the launching shell.
+- **The `backend.app.main:app` entrypoint the unit's `ExecStart` points at
+  exists and works.** `main.py` wires up guardrails, apt-clutter scanning,
+  exact/near-duplicate detection, staleness scoring, capacity forecasting,
+  and the NOVA Copilot retrieval/answer pipeline behind `/health`,
+  `/api/guardrails/check`, `/api/recommendations`, `/api/copilot/search`,
+  `/api/apt-clutter/scan`, and `/api/audit-log`(`/verify`) - all covered
+  by `backend/tests` (run via `pytest backend/tests`).
 
 Stubbed / not yet done:
-- **There is no `app.main:app` yet.** `backend/app/` currently has no
-  `main.py` or FastAPI app object - `guardrails.py`, `apt_clutter.py`, and
-  `audit_log.py` exist, but nothing exposes them over HTTP yet. The unit
-  file assumes this entrypoint will exist at that module path; update
-  `ExecStart` if the real entrypoint ends up somewhere else.
 - **No `dpkg-deb`/`debuild` build script exists.** There's no `rules`
   file, `changelog`, `compat` file, or `debian/nova.install` listing which
   built files land where - none of the other pieces debhelper needs to
