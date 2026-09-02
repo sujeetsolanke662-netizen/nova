@@ -1,0 +1,68 @@
+.btn-secondary {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent-safe);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.forecast-panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  padding: 24px 28px;
+  margin-top: 20px;
+}
+
+.usage-number {
+  font-size: 48px;
+  font-weight: 600;
+  line-height: 1;
+  margin-bottom: 14px;
+}
+
+.usage-bar-track {
+  width: 100%;
+  height: 10px;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.usage-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.2s ease;
+}
+
+.usage-bar-safe {
+  background: var(--accent-safe);
+}
+
+.usage-bar-review {
+  background: var(--accent-review);
+}
+
+.usage-bar-blocked {
+  background: var(--accent-blocked);
+}
+
+.usage-meta {
+  font-size: 13px;
+  margin: 10px 0 0;
+}
+
+.forecast-sentence {
+  font-size: 15px;
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--panel-border);
+}
