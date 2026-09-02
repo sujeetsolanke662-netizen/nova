@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..app.audit_log import DEFAULT_LOG_PATH
+from ..app.forecasting import DEFAULT_SNAPSHOT_LOG
+from ..app.quarantine import DEFAULT_MANIFEST_PATH, DEFAULT_QUARANTINE_DIR
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
 
@@ -36,11 +38,26 @@ def _default_audit_log_path() -> str:
     return os.environ.get("NOVA_AUDIT_LOG_PATH", str(DEFAULT_LOG_PATH))
 
 
+def _default_quarantine_dir() -> str:
+    return os.environ.get("NOVA_QUARANTINE_DIR", str(DEFAULT_QUARANTINE_DIR))
+
+
+def _default_quarantine_manifest_path() -> str:
+    return os.environ.get("NOVA_QUARANTINE_MANIFEST_PATH", str(DEFAULT_MANIFEST_PATH))
+
+
+def _default_snapshot_log_path() -> str:
+    return os.environ.get("NOVA_SNAPSHOT_LOG_PATH", str(DEFAULT_SNAPSHOT_LOG))
+
+
 @dataclass(frozen=True)
 class Settings:
     scan_roots: list[str] = field(default_factory=_default_scan_roots)
     protected_paths_config: str = field(default_factory=_default_protected_paths_config)
     audit_log_path: str = field(default_factory=_default_audit_log_path)
+    quarantine_dir: str = field(default_factory=_default_quarantine_dir)
+    quarantine_manifest_path: str = field(default_factory=_default_quarantine_manifest_path)
+    snapshot_log_path: str = field(default_factory=_default_snapshot_log_path)
 
 
 def get_settings() -> Settings:

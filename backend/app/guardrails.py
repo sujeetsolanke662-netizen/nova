@@ -27,6 +27,7 @@ from pathlib import Path
 import yaml
 
 from . import audit_log
+from .audit_log import DEFAULT_LOG_PATH
 
 PROTECTED = "protected"
 OUTSIDE_SCAN_SCOPE = "outside_scan_scope"
@@ -100,7 +101,12 @@ def _matches_pattern(resolved_str: str, pattern: str) -> bool:
     return False
 
 
-def is_protected(path: str, patterns: list[dict], log: bool = False) -> tuple[bool, str | None]:
+def is_protected(
+    path: str,
+    patterns: list[dict],
+    log: bool = False,
+    log_path: str | Path = DEFAULT_LOG_PATH,
+) -> tuple[bool, str | None]:
     """Check whether a path is protected.
 
     Returns (True, reason) for the first matching pattern, else (False, None).
@@ -114,6 +120,12 @@ def is_protected(path: str, patterns: list[dict], log: bool = False) -> tuple[bo
     read-only inspection (e.g. "would this be blocked?" queries, which do
     not represent a real action and must not pollute the ledger). Pass
     log=True only from a real-enforcement call site.
+
+    ``log_path`` is where that entry is written when ``log`` is True. It
+    defaults to the module's own default log, but a real call site should
+    always pass the caller's actual configured audit log path (e.g.
+    Settings.audit_log_path) - otherwise a block gets recorded somewhere
+    other than the log the rest of the application reads from.
     """
     resolved_str = str(_resolve(path))
 
@@ -124,13 +136,20 @@ def is_protected(path: str, patterns: list[dict], log: bool = False) -> tuple[bo
                     action_type="guardrail_block",
                     target_paths=[resolved_str],
                     reason=entry["reason"],
+                    log_path=log_path,
                 )
             return True, entry["reason"]
 
     return False, None
 
 
-def classify_path(path: str, patterns: list[dict], scan_roots: list[str], log: bool = False) -> str:
+def classify_path(
+    path: str,
+    patterns: list[dict],
+    scan_roots: list[str],
+    log: bool = False,
+    log_path: str | Path = DEFAULT_LOG_PATH,
+) -> str:
     """Classify a path as "protected", "outside_scan_scope", or "reviewable".
 
     Protection always takes priority: a protected path is reported as
@@ -138,12 +157,12 @@ def classify_path(path: str, patterns: list[dict], scan_roots: list[str], log: b
     the guardrail must never be bypassed just because a directory was
     configured for scanning.
 
-    ``log`` is passed straight through to ``is_protected`` - see there for
-    when it should be True vs. False.
+    ``log`` and ``log_path`` are passed straight through to ``is_protected``
+    - see there for when they matter.
     """
     resolved = _resolve(path)
 
-    protected, _ = is_protected(str(resolved), patterns, log=log)
+    protected, _ = is_protected(str(resolved), patterns, log=log, log_path=log_path)
     if protected:
         return PROTECTED
 
