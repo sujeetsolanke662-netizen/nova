@@ -17,6 +17,16 @@ Type=simple
 User=nova
 Group=nova
 
+# NOVA's offline claim (see README.md at the repo root) must hold
+# regardless of what environment variables happen to be set in whatever
+# shell launches this unit - systemd units don't inherit a login shell's
+# environment, but set these explicitly anyway rather than relying on
+# that. Forces the sentence-transformers/HF Hub libraries used by
+# backend/app/copilot_retrieval.py to only ever load models already
+# cached on disk and never attempt a network call.
+Environment=HF_HUB_OFFLINE=1
+Environment=TRANSFORMERS_OFFLINE=1
+
 # Adjust this if the FastAPI app entrypoint moves. backend.app.main:app is
 # the entrypoint given WorkingDirectory=/opt/nova and the app code copied
 # to /opt/nova/backend (see packaging/README.md's local-testing steps).

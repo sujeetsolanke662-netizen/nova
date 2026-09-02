@@ -1,0 +1,123 @@
+.verify-banner {
+  border: 1px solid;
+  border-left-width: 4px;
+  padding: 16px 20px;
+  margin: 4px 0 24px;
+}
+
+.verify-banner-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.verify-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.verify-banner-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.verify-banner-safe {
+  color: var(--accent-safe);
+  border-color: rgba(79, 184, 168, 0.4);
+  background: rgba(79, 184, 168, 0.1);
+}
+
+.verify-banner-blocked {
+  color: var(--accent-blocked);
+  border-color: rgba(217, 83, 79, 0.4);
+  background: rgba(217, 83, 79, 0.14);
+}
+
+.verify-banner-error {
+  font-size: 13px;
+  font-weight: 500;
+  margin: 8px 0 0;
+}
+
+.audit-reverify {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.audit-reverify:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+.audit-reverify:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.badge-blocked {
+  color: var(--accent-blocked);
+  border-color: rgba(217, 83, 79, 0.4);
+  background: rgba(217, 83, 79, 0.1);
+}
+
+.audit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.audit-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  padding: 16px 18px;
+}
+
+.audit-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.audit-entry-id {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.audit-timestamp {
+  font-size: 13px;
+  margin-left: auto;
+}
+
+.audit-reason {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.audit-paths {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.audit-paths li {
+  font-size: 13px;
+  color: var(--text-dim);
+  word-break: break-all;
+}

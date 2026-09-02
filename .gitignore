@@ -12,3 +12,6 @@ __pycache__/
 # Node
 node_modules/
 dist/
+
+# Runtime-generated data (audit logs, quarantine manifests/files, snapshots)
+backend/data/

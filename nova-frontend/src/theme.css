@@ -1,0 +1,14 @@
+:root {
+  --bg: #14171C;
+  --panel: #1C2129;
+  --panel-border: #2A303A;
+  --text: #E8E6E1;
+  --text-dim: #9BA1AC;
+
+  --accent-safe: #4FB8A8;
+  --accent-review: #E0A84D;
+  --accent-blocked: #D9534F;
+
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+  --font-sans: 'IBM Plex Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+}

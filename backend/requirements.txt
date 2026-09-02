@@ -2,3 +2,10 @@ pyyaml
 pytest
 fastapi
 httpx
+Pillow
+imagehash
+datasketch
+numpy
+sentence-transformers
+faiss-cpu
+rank_bm25
