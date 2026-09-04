@@ -15,3 +15,11 @@ dist/
 
 # Runtime-generated data (audit logs, quarantine manifests/files, snapshots)
 backend/data/
+
+# Local LLM model weights (too large for git; fetch/download separately)
+backend/models/*.gguf
+
+# Local scratch/build logs and backup dirs
+*.log
+nova-frontend-old/
+nova-frontend/.vite/

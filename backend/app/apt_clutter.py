@@ -33,6 +33,18 @@ class AptQueryError(RuntimeError):
     """Raised when a shelled-out apt/dpkg/uname query fails or times out."""
 
 
+class UnsafeApplyError(RuntimeError):
+    """Raised when apply_finding() is called on a finding that isn't safe to auto-apply.
+
+    Mirrors the conservative philosophy of the rest of this module: findings
+    from orphaned_packages() and old_kernels() carry safe_to_auto_apply=False
+    because removing them can have real consequences (an autoremove candidate
+    might still be wanted, an "old" kernel might be a deliberate pin) that
+    only a human should decide on. apply_finding() refuses those outright,
+    no exceptions, rather than trusting a caller to have already checked.
+    """
+
+
 def _run(args: list[str], timeout: float = DEFAULT_TIMEOUT) -> subprocess.CompletedProcess[str]:
     """Run a command safely (arg list, never shell=True) and return the result.
 
@@ -375,3 +387,52 @@ def scan_apt_clutter() -> list[dict]:
         )
 
     return findings
+
+
+# --- apply_finding ---
+
+
+def apply_finding(
+    finding: dict, audit_log_path: str | Path = audit_log.DEFAULT_LOG_PATH
+) -> dict:
+    """Actually perform the cleanup action a finding describes.
+
+    Only ever acts on findings marked safe_to_auto_apply=True by their own
+    check function - currently that's just stale_deb_cache (delete the
+    cache file directly, it's a pure cache artifact) and
+    orphaned_config_file (purge the package so dpkg drops the residual
+    config). Anything else raises UnsafeApplyError and touches nothing;
+    there is no override, by design - see UnsafeApplyError's docstring.
+    """
+    if not finding.get("safe_to_auto_apply"):
+        raise UnsafeApplyError(
+            f"Refusing to apply finding with category '{finding.get('category')}': "
+            "it is not marked safe_to_auto_apply."
+        )
+
+    category = finding.get("category")
+    target_paths = finding.get("target_paths", [])
+
+    if category == CACHE_STALE:
+        deb_path = Path(target_paths[0])
+        try:
+            deb_path.unlink()
+        except OSError as e:
+            raise AptQueryError(f"Failed to remove stale cache file '{deb_path}': {e}") from e
+    elif category == CONFIG_ORPHANED:
+        package = target_paths[0]
+        _run_strict(["apt-get", "purge", "-y", package])
+    else:
+        raise UnsafeApplyError(
+            f"Refusing to apply finding with category '{category}': no safe apply action "
+            "is implemented for it."
+        )
+
+    audit_log.append_entry(
+        action_type="apt_clutter_apply",
+        target_paths=target_paths,
+        reason=finding.get("description", ""),
+        log_path=audit_log_path,
+    )
+
+    return {"applied": True, "finding": finding}

@@ -1,4 +1,6 @@
+import logging
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -56,7 +58,46 @@ def test_health_returns_ok():
         response = test_client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert isinstance(body["llm_available"], bool)
+
+
+def test_lifespan_startup_loads_the_llm(monkeypatch):
+    """The model must load once at boot (see main.py's lifespan handler),
+    not lazily on the first /api/copilot/ask request - that's the whole
+    point of the startup change: move the slow, unpredictable load cost
+    off the request path. Mocked here rather than exercised for real so
+    this test stays fast; the real load is covered by manual end-to-end
+    verification."""
+    mock_load_llm = Mock()
+    monkeypatch.setattr("backend.app.main.load_llm", mock_load_llm)
+
+    mock_load_llm.assert_not_called()
+
+    with TestClient(app):
+        pass
+
+    mock_load_llm.assert_called_once()
+
+
+def test_lifespan_startup_survives_missing_llm_model(monkeypatch, caplog):
+    """A missing/misconfigured .gguf must never take the whole server
+    down - main.py's lifespan handler must catch LLMModelNotFoundError
+    specifically, log a clear warning, and keep booting normally. Forces
+    a genuinely cold load attempt (rather than mocking load_llm() away,
+    like test_lifespan_startup_loads_the_llm above) so this exercises the
+    real path-check-then-raise behavior, not just the try/except shape."""
+    monkeypatch.setattr("backend.app.llm_answer._llm_instance", None)
+    monkeypatch.setenv("NOVA_LLM_MODEL_PATH", "/definitely/does/not/exist.gguf")
+
+    with caplog.at_level(logging.WARNING, logger="backend.app.main"):
+        with TestClient(app) as test_client:
+            response = test_client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "llm_available": False}
+    assert any("LLM model file not found" in record.message for record in caplog.records)
 
 
 def test_guardrails_check_classifies_protected_path(client):
@@ -120,6 +161,60 @@ def test_apt_clutter_scan_returns_list(client, monkeypatch):
     body = response.json()
     assert isinstance(body, list)
     assert body == fake_findings
+
+
+def test_apt_clutter_apply_endpoint_returns_result_on_success(client, monkeypatch):
+    test_client, _scan_root, _audit_log_path = client
+
+    finding = {
+        "category": "stale_deb_cache",
+        "description": "stale cache file",
+        "estimated_size_bytes": 100,
+        "safe_to_auto_apply": True,
+        "target_paths": ["/var/cache/apt/archives/foo_1.0_amd64.deb"],
+    }
+    fake_result = {"applied": True, "finding": finding}
+
+    captured = {}
+
+    def fake_apply_finding(f, audit_log_path=None):
+        captured["finding"] = f
+        captured["audit_log_path"] = audit_log_path
+        return fake_result
+
+    monkeypatch.setattr("backend.app.main.apply_finding", fake_apply_finding)
+
+    response = test_client.post("/api/apt-clutter/apply", json={"finding": finding})
+
+    assert response.status_code == 200
+    assert response.json() == fake_result
+    assert captured["finding"] == finding
+    assert str(captured["audit_log_path"]) == str(_audit_log_path)
+
+
+def test_apt_clutter_apply_endpoint_maps_unsafe_apply_error_to_400(client, monkeypatch):
+    test_client, _scan_root, _audit_log_path = client
+
+    from backend.app.apt_clutter import UnsafeApplyError
+
+    def fake_apply_finding(f, audit_log_path=None):
+        raise UnsafeApplyError("not marked safe_to_auto_apply")
+
+    monkeypatch.setattr("backend.app.main.apply_finding", fake_apply_finding)
+
+    finding = {
+        "category": "old_kernel",
+        "description": "an old kernel",
+        "estimated_size_bytes": 100,
+        "safe_to_auto_apply": False,
+        "target_paths": ["linux-image-old"],
+    }
+
+    response = test_client.post("/api/apt-clutter/apply", json={"finding": finding})
+
+    assert response.status_code == 400
+    assert "detail" in response.json()
+    assert "safe_to_auto_apply" in response.json()["detail"]
 
 
 def test_recommendations_valid_root_returns_expected_shape(client, monkeypatch):

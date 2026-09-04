@@ -11,17 +11,26 @@ data passed in.
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
 from .copilot_retrieval import rerank, search
+from .llm_answer import generate_llm_answer, is_llm_available
+
+logger = logging.getLogger(__name__)
 
 WHY_FULL = "why_full"
 FIND_DUPLICATES = "find_duplicates"
 WHATS_SAFE = "whats_safe"
 GENERAL = "general"
+OUT_OF_SCOPE = "out_of_scope"
 
 NO_RESULTS_TEXT = "I didn't find anything matching that."
+SCOPED_DECLINE_TEXT = (
+    "I can only help with questions about the files and storage on this system - "
+    "try asking what's using space, what's safe to delete, or whether you have duplicates."
+)
 
 # Simple, honest keyword matching - no ML. This only needs to pick a
 # reasonable template family, not truly understand the question. Order
@@ -71,18 +80,51 @@ _INTENT_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ),
 ]
 
+# Broad storage/file-related signal used only as a scope check, not to pick
+# a specific template family - see classify_query_intent(). Deliberately
+# generous (better to let an ambiguous question through to "general" than
+# to wrongly decline it) and easy to extend with more terms.
+_SCOPE_KEYWORDS: tuple[str, ...] = (
+    "file",
+    "files",
+    "disk",
+    "drive",
+    "space",
+    "storage",
+    "delete",
+    "clean",
+    "duplicate",
+    "duplicates",
+    "folder",
+    "directory",
+    "download",
+    "downloads",
+    "large",
+    "size",
+    "stale",
+    "old",
+    "recent",
+    "safe",
+    "quarantine",
+)
+
 
 def classify_query_intent(query: str) -> str:
     """Classify a query into one of the template families above.
 
     Deliberately simple substring matching, not a model - see the module
-    docstring for why. Falls back to "general" when nothing matches.
+    docstring for why. Falls back to "general" when the question has some
+    storage/file-related signal but doesn't match a more specific intent,
+    and to "out_of_scope" when it has none at all (e.g. weather, general
+    knowledge, math) - see answer_query()'s short-circuit for that case.
     """
     query_lower = query.lower()
     for intent, keywords in _INTENT_KEYWORDS:
         if any(keyword in query_lower for keyword in keywords):
             return intent
-    return GENERAL
+    if any(keyword in query_lower for keyword in _SCOPE_KEYWORDS):
+        return GENERAL
+    return OUT_OF_SCOPE
 
 
 def _filename(path: str) -> str:
@@ -236,7 +278,21 @@ def generate_answer(query: str, reranked_results: list[dict], intent: str) -> di
     can highlight/link them later. Every fact stated comes straight from
     the items in reranked_results - if there's nothing to work with, this
     says so honestly rather than fabricating an answer.
+
+    intent == "out_of_scope" is handled first, before even looking at
+    reranked_results: the question was already found to have no
+    storage/file-related signal at all (classify_query_intent()), so there
+    is nothing useful a template could say - this returns a clear decline
+    with source: "scoped_decline" instead.
     """
+    if intent == OUT_OF_SCOPE:
+        return {
+            "answer_text": SCOPED_DECLINE_TEXT,
+            "cited_paths": [],
+            "intent": intent,
+            "source": "scoped_decline",
+        }
+
     if not reranked_results:
         return {"answer_text": NO_RESULTS_TEXT, "cited_paths": [], "intent": intent}
 
@@ -249,10 +305,44 @@ def answer_query(
     index: dict,
     top_k_search: int = 10,
     top_k_rerank: int = 5,
+    prefer_llm: bool = True,
 ) -> dict:
     """Full pipeline glue: classify intent, search, rerank, then generate
-    the final answer from the reranked candidates."""
+    the final answer from the reranked candidates.
+
+    When prefer_llm is True (the default), this tries the LLM-backed
+    answer path first for a more natural-sounding response - but only if
+    the LLM was actually loaded successfully at server startup
+    (is_llm_available()). If it wasn't (e.g. LLMModelNotFoundError at
+    boot - see main.py's lifespan handler), this skips straight to the
+    templated path below without even attempting the LLM call: we already
+    know it can't work, so there's no point trying and catching the same
+    failure on every single request. When the LLM is available, that path
+    is still never allowed to surface a user-facing error: a timeout, a
+    grounding failure, or anything else it raises is caught here and
+    logged at debug level, and this falls straight back to the templated
+    path, which is fully self-contained and always succeeds (or returns
+    an honest "nothing found" answer). Pass prefer_llm=False to skip the
+    LLM path entirely regardless of availability, e.g. for fast/
+    deterministic automated testing.
+
+    intent == "out_of_scope" short-circuits immediately, before search,
+    rerank, or the LLM path ever run: the question has already been found
+    to have no storage/file-related signal at all, so there is no point
+    spending retrieval or a model call on it - see generate_answer()'s
+    handling of this intent for the actual decline response.
+    """
     intent = classify_query_intent(query)
+    if intent == OUT_OF_SCOPE:
+        return generate_answer(query, [], intent)
+
     search_results = search(query, index, top_k=top_k_search)
     reranked_results = rerank(query, search_results, top_k=top_k_rerank)
+
+    if prefer_llm and is_llm_available():
+        try:
+            return generate_llm_answer(query, reranked_results, intent)
+        except Exception as exc:  # noqa: BLE001 - covers LLMTimeoutError, LLMGroundingError, and anything else the LLM path can raise
+            logger.debug("LLM answer path failed, falling back to templated answer: %s", exc, exc_info=True)
+
     return generate_answer(query, reranked_results, intent)

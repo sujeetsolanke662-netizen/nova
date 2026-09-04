@@ -50,6 +50,21 @@ def _default_snapshot_log_path() -> str:
     return os.environ.get("NOVA_SNAPSHOT_LOG_PATH", str(DEFAULT_SNAPSHOT_LOG))
 
 
+def _default_llm_model_path() -> str:
+    return os.environ.get(
+        "NOVA_LLM_MODEL_PATH",
+        str(_BACKEND_DIR / "models" / "Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
+    )
+
+
+def _default_llm_timeout_seconds() -> float:
+    # The model now loads once at server startup (see main.py's lifespan
+    # handler), so this only has to cover generation time, not load time -
+    # observed clean generation was ~4.5s, so 12.0s leaves real margin
+    # without resurrecting the old cold-load-eats-the-budget problem.
+    return float(os.environ.get("NOVA_LLM_TIMEOUT_SECONDS", "12.0"))
+
+
 @dataclass(frozen=True)
 class Settings:
     scan_roots: list[str] = field(default_factory=_default_scan_roots)
@@ -58,6 +73,8 @@ class Settings:
     quarantine_dir: str = field(default_factory=_default_quarantine_dir)
     quarantine_manifest_path: str = field(default_factory=_default_quarantine_manifest_path)
     snapshot_log_path: str = field(default_factory=_default_snapshot_log_path)
+    llm_model_path: str = field(default_factory=_default_llm_model_path)
+    llm_timeout_seconds: float = field(default_factory=_default_llm_timeout_seconds)
 
 
 def get_settings() -> Settings:

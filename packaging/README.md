@@ -106,3 +106,41 @@ Stubbed / not yet done:
 - **Version/changelog/maintainer info in `control` and `postinst`'s
   maintainer email are placeholders** and haven't been checked against
   whatever the project's actual release process ends up being.
+
+## Benchmarking
+
+`backend/scripts/benchmark_scan.py` is a standalone scalability benchmark
+for NOVA's core file-processing pipeline - not a pytest test, and not run
+as part of `pytest backend/tests`. It exists to get real, reportable
+throughput/memory numbers (e.g. for the hackathon presentation), not to
+assert pass/fail.
+
+It generates a synthetic file tree (realistic size mix - mostly small
+files, some medium, a handful large; ~15% exact duplicates; spread across
+a several-levels-deep directory tree) in a temp directory, then times
+`scanner.scan_directory()`, `dedup.find_exact_duplicates()`,
+`staleness.score_all()`, and the full
+`recommendation.generate_recommendations()` end-to-end separately, plus
+peak RSS memory. The generated tree (and a throwaway audit log file next
+to it) is deleted afterward unless `--keep` is passed.
+
+```sh
+# Default: 10,000 files, fresh temp dir, cleaned up afterward.
+python -m backend.scripts.benchmark_scan
+
+# A second, larger data point to see how it scales:
+python -m backend.scripts.benchmark_scan --file-count 25000
+
+# Keep the generated tree around for manual inspection:
+python -m backend.scripts.benchmark_scan --file-count 5000 --keep --tmp-dir /tmp/nova_bench
+
+# Same synthetic tree every time (default seed 42) - pass --seed to compare
+# before/after a code change on identical data, or a different --seed for
+# a fresh random tree.
+python -m backend.scripts.benchmark_scan --file-count 10000 --seed 7
+```
+
+Every synthetic file uses an extension outside `near_dedup.py`'s
+`IMAGE_EXTENSIONS`/`TEXT_EXTENSIONS`, so this measures scan/dedup/
+staleness throughput specifically, not that module's already-documented
+O(n²) near-duplicate comparison (see its own module docstring).

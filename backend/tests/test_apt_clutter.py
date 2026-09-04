@@ -4,6 +4,8 @@ import pytest
 
 from backend.app.apt_clutter import (
     AptQueryError,
+    UnsafeApplyError,
+    apply_finding,
     old_kernels,
     orphaned_config_files,
     orphaned_packages,
@@ -459,4 +461,118 @@ def test_scan_apt_clutter_logs_nothing_when_no_findings(monkeypatch, audit_calls
     findings = scan_apt_clutter()
 
     assert findings == []
+    assert audit_calls == []
+
+
+# --- apply_finding ---
+
+
+def _finding(category, target_paths, safe, description="a finding"):
+    return {
+        "category": category,
+        "description": description,
+        "estimated_size_bytes": 100,
+        "safe_to_auto_apply": safe,
+        "target_paths": target_paths,
+    }
+
+
+@pytest.mark.parametrize("category", ["old_kernel", "orphaned_package"])
+def test_apply_finding_rejects_unsafe_categories(category, audit_calls):
+    finding = _finding(category, ["some-target"], safe=False)
+
+    with pytest.raises(UnsafeApplyError, match="not marked safe_to_auto_apply"):
+        apply_finding(finding)
+
+    # A refusal must never touch the filesystem or the audit trail.
+    assert audit_calls == []
+
+
+def test_apply_finding_rejects_when_safe_flag_true_but_category_unrecognized(audit_calls):
+    # Defense in depth: even if safe_to_auto_apply were True, only the two
+    # categories with a real apply implementation may proceed.
+    finding = _finding("orphaned_package", ["some-target"], safe=True)
+
+    with pytest.raises(UnsafeApplyError, match="no safe apply action"):
+        apply_finding(finding)
+
+    assert audit_calls == []
+
+
+def test_apply_finding_stale_deb_cache_deletes_real_file_and_logs(tmp_path, audit_calls):
+    deb_file = tmp_path / "old-removed-package_1.2.3-1_amd64.deb"
+    deb_file.write_bytes(b"0" * 2048)
+
+    finding = _finding(
+        "stale_deb_cache",
+        [str(deb_file)],
+        safe=True,
+        description="Cached package file is stale and can be safely removed.",
+    )
+
+    result = apply_finding(finding)
+
+    assert result == {"applied": True, "finding": finding}
+    assert not deb_file.exists()
+
+    assert len(audit_calls) == 1
+    assert audit_calls[0]["action_type"] == "apt_clutter_apply"
+    assert audit_calls[0]["target_paths"] == [str(deb_file)]
+    assert audit_calls[0]["reason"] == finding["description"]
+
+
+def test_apply_finding_stale_deb_cache_missing_file_raises_apt_query_error(tmp_path, audit_calls):
+    deb_file = tmp_path / "already-gone_1.0-1_amd64.deb"  # never created
+
+    finding = _finding("stale_deb_cache", [str(deb_file)], safe=True)
+
+    with pytest.raises(AptQueryError, match="Failed to remove"):
+        apply_finding(finding)
+
+    assert audit_calls == []
+
+
+def test_apply_finding_orphaned_config_file_purges_package(monkeypatch, audit_calls):
+    responses = [
+        (
+            _starts_with("apt-get", "purge", "-y", "old-removed-package"),
+            _completed(["apt-get"], stdout="Purging configuration files for old-removed-package"),
+        ),
+    ]
+    fake = _install_fake_run(monkeypatch, responses)
+
+    finding = _finding(
+        "orphaned_config_file",
+        ["old-removed-package"],
+        safe=True,
+        description="'old-removed-package' was removed but its configuration files remain.",
+    )
+
+    result = apply_finding(finding)
+
+    assert result == {"applied": True, "finding": finding}
+    assert fake.calls == [["apt-get", "purge", "-y", "old-removed-package"]]
+
+    assert len(audit_calls) == 1
+    assert audit_calls[0]["action_type"] == "apt_clutter_apply"
+    assert audit_calls[0]["target_paths"] == ["old-removed-package"]
+    assert audit_calls[0]["reason"] == finding["description"]
+
+
+def test_apply_finding_orphaned_config_file_raises_on_purge_failure(monkeypatch, audit_calls):
+    responses = [
+        (
+            _starts_with("apt-get", "purge", "-y", "old-removed-package"),
+            _completed(
+                ["apt-get"], stdout="", stderr="E: Unable to locate package", returncode=1
+            ),
+        ),
+    ]
+    _install_fake_run(monkeypatch, responses)
+
+    finding = _finding("orphaned_config_file", ["old-removed-package"], safe=True)
+
+    with pytest.raises(AptQueryError, match="apt-get"):
+        apply_finding(finding)
+
     assert audit_calls == []

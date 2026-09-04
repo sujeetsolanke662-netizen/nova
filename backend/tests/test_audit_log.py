@@ -3,8 +3,10 @@ from pathlib import Path
 
 import pytest
 
+from backend.app import audit_log as audit_log_module
 from backend.app.audit_log import (
     GENESIS_HASH,
+    _reset_append_cache,
     append_entry,
     read_log,
     verify_chain,
@@ -14,6 +16,17 @@ from backend.app.audit_log import (
 @pytest.fixture
 def log_path(tmp_path):
     return tmp_path / "audit_log.jsonl"
+
+
+@pytest.fixture(autouse=True)
+def _clean_append_cache():
+    """Every test gets a clean append_entry() tail cache, and leaves one
+    behind - so a stale cached (next_entry_id, prev_hash) from one test's
+    log_path can never leak into another's, even though tmp_path already
+    makes that unlikely by giving each test its own file."""
+    _reset_append_cache()
+    yield
+    _reset_append_cache()
 
 
 def test_appending_multiple_entries_builds_valid_chain(log_path):
@@ -142,3 +155,77 @@ def test_read_log_returns_entries_in_order_with_expected_fields(log_path):
     assert entries[1]["reason"] == "staleness score 0.91, not opened in 214 days"
     assert entries[1]["actor"] == "user:yash"
     assert entries[1]["prev_hash"] == entries[0]["entry_hash"]
+
+
+# --- append_entry() tail-caching (the O(n^2) fix) ---
+
+
+def test_append_entry_reads_the_log_tail_from_disk_at_most_once(log_path, monkeypatch):
+    """Regression test for the O(n^2) bug backend/scripts/benchmark_scan.py
+    surfaced: append_entry() used to re-read and re-parse the WHOLE file on
+    every call just to find the tail. Appending N entries in a row must now
+    hit disk for the tail at most once (the first, cold call) - every
+    later call in the same process must use the in-memory cache instead.
+    """
+    call_count = 0
+    real_load_tail = audit_log_module._load_tail_from_disk
+
+    def counting_load_tail(f):
+        nonlocal call_count
+        call_count += 1
+        return real_load_tail(f)
+
+    monkeypatch.setattr(audit_log_module, "_load_tail_from_disk", counting_load_tail)
+
+    for i in range(20):
+        append_entry("recommend", [f"/tmp/file_{i}.txt"], f"reason {i}", log_path=log_path)
+
+    assert call_count == 1
+
+    entries = read_log(log_path)
+    assert [e["entry_id"] for e in entries] == list(range(20))
+    ok, bad_id = verify_chain(log_path)
+    assert ok is True
+    assert bad_id is None
+
+
+def test_append_entry_resumes_correctly_from_disk_after_cache_reset(log_path):
+    """A cold read (cache miss) must pick up the TRUE current tail from
+    disk, not genesis - proving the cache doesn't just happen to look
+    right because it's never actually being exercised as a cache."""
+    for i in range(5):
+        append_entry("recommend", ["/tmp/a.txt"], f"reason {i}", log_path=log_path)
+
+    last_before_reset = read_log(log_path)[-1]
+
+    _reset_append_cache(log_path)
+
+    sixth = append_entry("recommend", ["/tmp/a.txt"], "reason 5", log_path=log_path)
+
+    assert sixth["entry_id"] == 5
+    assert sixth["prev_hash"] == last_before_reset["entry_hash"]
+
+    ok, bad_id = verify_chain(log_path)
+    assert ok is True
+    assert bad_id is None
+
+
+def test_reset_append_cache_can_target_a_single_log_path(tmp_path):
+    log_a = tmp_path / "a.jsonl"
+    log_b = tmp_path / "b.jsonl"
+
+    append_entry("recommend", ["/tmp/a.txt"], "reason a", log_path=log_a)
+    append_entry("recommend", ["/tmp/b.txt"], "reason b", log_path=log_b)
+
+    key_a = str(log_a.resolve())
+    key_b = str(log_b.resolve())
+    assert key_a in audit_log_module._append_cache
+    assert key_b in audit_log_module._append_cache
+
+    _reset_append_cache(log_a)
+
+    assert key_a not in audit_log_module._append_cache
+    assert key_b in audit_log_module._append_cache
+
+    _reset_append_cache()
+    assert audit_log_module._append_cache == {}

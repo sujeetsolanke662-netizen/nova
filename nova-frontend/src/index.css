@@ -1,37 +1,112 @@
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: 'Outfit', 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, "Cascadia Code", "SF Mono", monospace;
+
+  /* --- Surfaces & ink -----------------------------------------------
+     Flat, named tokens (not a numbered scale) - warm-neutral, no blue
+     tint. Values below are light mode; .dark overrides every one with
+     the exact dark palette. Hierarchy: bg -> surface -> raised, each a
+     step up in lightness; border-faint separates rows inside a panel,
+     border separates panels from each other. */
+  --color-bg: #faf8f4;
+  --color-surface: #ffffff;
+  --color-raised: #f4f1ea;
+  --color-border: #e2ddd0;
+  --color-border-faint: #ece7db;
+  --color-ink: #24231f;
+  --color-ink-muted: #746f63;
+  --color-ink-dim: #b3ad9d;
+
+  /* --- Accent (muted amber-gold) --------------------------------------
+     Primary navigation and user-invoked actions ONLY: buttons, links,
+     the active-nav state. Never decorative. The color of precision
+     instruments, not a SaaS purple. */
+  --color-accent: #c8923a;
+  --color-accent-ink: #8a6023;
+  --color-accent-contrast: #191307;
+  --color-accent-faint: rgba(200, 146, 58, 0.08);
+  --color-accent-muted: rgba(200, 146, 58, 0.16);
+
+  /* --- Status: ok / warn / danger --------------------------------------
+     Desaturated, not neon. ok = verified/safe/reversible. warn = needs
+     attention, unresolved. danger = blocked/destructive - the heaviest
+     signal in the app. */
+  --color-ok: #4a9e6b;
+  --color-ok-faint: rgba(74, 158, 107, 0.08);
+  --color-ok-muted: rgba(74, 158, 107, 0.16);
+  --color-warn: #c97d2a;
+  --color-warn-faint: rgba(201, 125, 42, 0.1);
+  --color-warn-muted: rgba(201, 125, 42, 0.18);
+  --color-danger: #c0453a;
+  --color-danger-faint: rgba(192, 69, 58, 0.08);
+  --color-danger-muted: rgba(192, 69, 58, 0.16);
+
+  --animate-fade-in: fade-in 0.12s ease-out;
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
-html,
-body,
-#root {
-  height: 100%;
+.dark {
+  --color-bg: #0e0f0f;
+  --color-surface: #131515;
+  --color-raised: #181b1b;
+  --color-border: #222626;
+  --color-border-faint: #1a1d1d;
+  --color-ink: #e8e3d8;
+  --color-ink-muted: #6e7070;
+  --color-ink-dim: #363a3a;
+
+  --color-accent: #c8923a;
+  --color-accent-ink: #c8923a;
+  --color-accent-contrast: #191307;
+  --color-accent-faint: rgba(200, 146, 58, 0.08);
+  --color-accent-muted: rgba(200, 146, 58, 0.16);
+
+  --color-ok: #4a9e6b;
+  --color-ok-faint: rgba(74, 158, 107, 0.08);
+  --color-ok-muted: rgba(74, 158, 107, 0.16);
+  --color-warn: #c97d2a;
+  --color-warn-faint: rgba(201, 125, 42, 0.1);
+  --color-warn-muted: rgba(201, 125, 42, 0.18);
+  --color-danger: #c0453a;
+  --color-danger-faint: rgba(192, 69, 58, 0.08);
+  --color-danger-muted: rgba(192, 69, 58, 0.16);
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+html {
+  font-family: var(--font-sans);
 }
 
 body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.55;
-  color-scheme: dark;
+  background: var(--color-bg);
+  color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-button,
-input {
-  font-family: inherit;
-  color: inherit;
+::selection {
+  background: var(--color-accent-muted);
 }
 
-.mono {
-  font-family: var(--font-mono);
-}
-
-.text-dim {
-  color: var(--text-dim);
+/* Slim, unobtrusive scrollbars that still work in both themes. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
 }

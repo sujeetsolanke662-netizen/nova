@@ -7,6 +7,7 @@ packaging/systemd/nova.service, which assumes this exact module path.
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
@@ -16,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from . import audit_log
-from .apt_clutter import scan_apt_clutter
+from .apt_clutter import UnsafeApplyError, apply_finding, scan_apt_clutter
 from .copilot_answer import answer_query, classify_query_intent, generate_answer
 from .copilot_retrieval import build_index, search
 from .forecasting import forecast_capacity, get_disk_usage, record_usage_snapshot
@@ -27,9 +28,12 @@ from .guardrails import (
     is_protected,
     load_protected_patterns,
 )
+from .llm_answer import LLMModelNotFoundError, is_llm_available, load_llm
 from .quarantine import QuarantineError, list_quarantined, quarantine_file, restore_file
 from .recommendation import generate_recommendations
 from ..config.settings import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -40,6 +44,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # classify_path() both just take this list as an argument, they don't
     # reload the YAML themselves.
     app.state.protected_patterns = load_protected_patterns(settings.protected_paths_config)
+    # Load the GGUF model now, at boot, rather than lazily on the first
+    # /api/copilot/ask request. Model load is the slow, unpredictable part
+    # (real disk + init time) - paying it once here means
+    # Settings.llm_timeout_seconds only has to cover generation time for
+    # every request the server actually serves. load_llm() caches the
+    # instance at module level, so this is a no-op on any later call.
+    #
+    # A missing model file (demo machine the .gguf wasn't copied onto, or
+    # a misconfigured path) must never take the whole server down with it -
+    # every other NOVA feature works fine without an LLM, Copilot just
+    # falls back to its templated answer path (see copilot_answer.py).
+    try:
+        load_llm()
+    except LLMModelNotFoundError as e:
+        logger.warning(
+            "%s - Copilot will run in templated-only mode until this is fixed and the "
+            "server is restarted.",
+            e,
+        )
     yield
 
 
@@ -60,8 +83,8 @@ app.add_middleware(
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, object]:
+    return {"status": "ok", "llm_available": is_llm_available()}
 
 
 @app.get("/api/guardrails/check")
@@ -237,6 +260,25 @@ def copilot_ask(request: AskRequest) -> dict:
 @app.get("/api/apt-clutter/scan")
 def apt_clutter_scan() -> list[dict]:
     return scan_apt_clutter()
+
+
+class AptClutterApplyRequest(BaseModel):
+    finding: dict
+
+
+@app.post("/api/apt-clutter/apply")
+def apt_clutter_apply(request: AptClutterApplyRequest) -> dict:
+    """Apply one apt-clutter finding for real (delete a stale .deb, or purge
+    a package's residual config) - see apply_finding()'s docstring for
+    exactly which categories that covers and why. Same error-handling shape
+    as the quarantine endpoints: the safety check lives in the underlying
+    function, this is just a thin wire that maps its refusal to a 400."""
+    settings: Settings = app.state.settings
+
+    try:
+        return apply_finding(request.finding, audit_log_path=settings.audit_log_path)
+    except UnsafeApplyError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/audit-log")

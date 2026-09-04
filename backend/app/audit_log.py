@@ -47,6 +47,74 @@ def _locked_file(path: Path, mode: str):
     return f
 
 
+def _read_last_line_bytes(f) -> bytes | None:
+    """Read just the last non-empty line of an open binary file.
+
+    Seeks backward from the end in fixed-size chunks rather than loading
+    the whole file, so the cost of finding the tail is bounded by the
+    length of the last line (almost always one chunk), not by total file
+    size. `f` must be a binary-mode file object.
+    """
+    f.seek(0, os.SEEK_END)
+    file_size = f.tell()
+    if file_size == 0:
+        return None
+
+    chunk_size = 4096
+    position = file_size
+    data = b""
+
+    while position > 0:
+        read_size = min(chunk_size, position)
+        position -= read_size
+        f.seek(position)
+        data = f.read(read_size) + data
+
+        stripped = data.rstrip(b"\n")
+        if b"\n" in stripped:
+            return stripped.rsplit(b"\n", 1)[-1]
+        if position == 0:
+            return stripped if stripped else None
+
+    return None
+
+
+def _load_tail_from_disk(f) -> tuple[int, str]:
+    """Determine (next_entry_id, prev_hash) from just the log's last line.
+
+    Falls back to genesis (entry_id 0, all-zero prev_hash) if the file has
+    no entries yet - same as the empty-file case always has.
+    """
+    last_line = _read_last_line_bytes(f)
+    if not last_line:
+        return 0, GENESIS_HASH
+
+    last_entry = json.loads(last_line.decode("utf-8"))
+    return last_entry["entry_id"] + 1, last_entry["entry_hash"]
+
+
+# In-memory cache of (next_entry_id, prev_hash) per log_path, populated on
+# first use per process and updated directly after each append - see
+# append_entry()'s docstring for why. Keyed by resolved absolute path so
+# different spellings of the same file share one entry.
+_append_cache: dict[str, tuple[int, str]] = {}
+
+
+def _reset_append_cache(log_path: str | Path | None = None) -> None:
+    """Clear append_entry()'s in-memory tail cache.
+
+    Pass a specific log_path to drop just that entry, or omit it to clear
+    everything. Tests that hand-edit a log file or otherwise change it on
+    disk outside append_entry() itself must call this first - otherwise a
+    stale cached (next_entry_id, prev_hash) from an earlier call would
+    silently paper over the change instead of picking it back up.
+    """
+    if log_path is None:
+        _append_cache.clear()
+    else:
+        _append_cache.pop(str(Path(log_path).resolve()), None)
+
+
 def append_entry(
     action_type: str,
     target_paths: list[str],
@@ -57,25 +125,36 @@ def append_entry(
     """Append a new tamper-evident entry to the audit log.
 
     Opens the log file for append with an exclusive lock held across the
-    read-last-entry + write-new-entry sequence, so concurrent writers from
-    a single process can't interleave and corrupt the hash chain.
+    whole read-previous-entry + write-new-entry sequence, so concurrent
+    writers from a single process can't interleave and corrupt the hash
+    chain. That's true whether or not the cache below is warm: the lock is
+    grabbed unconditionally, before the cache is even consulted, so it
+    still serializes concurrent callers exactly as before.
+
+    The previous entry's hash and the next entry_id are cached in memory
+    per log_path after the first call, instead of re-reading and
+    re-parsing the *entire* file on every append - that was O(n) per call
+    and O(n^2) over a run appending n entries, which is what
+    backend/scripts/benchmark_scan.py's numbers surfaced. On a cache miss
+    (first call for this log_path in this process, or after
+    _reset_append_cache()), this still only reads the file's last line
+    (see _read_last_line_bytes), never the whole thing. verify_chain() is
+    intentionally untouched by any of this - it's the one place that must
+    always re-derive trust from the full file on disk, never from this
+    cache.
     """
     log_path = Path(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Open in r+ (creating the file first if needed) so we can hold one lock
-    # across both reading the previous tail and appending the new line.
     log_path.touch(exist_ok=True)
 
-    with _locked_file(log_path, "r+") as f:
-        prev_hash = GENESIS_HASH
-        next_id = 0
+    cache_key = str(log_path.resolve())
 
-        lines = [line for line in f.read().splitlines() if line.strip()]
-        if lines:
-            last_entry = json.loads(lines[-1])
-            prev_hash = last_entry["entry_hash"]
-            next_id = last_entry["entry_id"] + 1
+    with _locked_file(log_path, "rb+") as f:
+        cached = _append_cache.get(cache_key)
+        if cached is None:
+            next_id, prev_hash = _load_tail_from_disk(f)
+        else:
+            next_id, prev_hash = cached
 
         entry_without_hash = {
             "entry_id": next_id,
@@ -90,9 +169,11 @@ def append_entry(
         entry = {**entry_without_hash, "entry_hash": entry_hash}
 
         f.seek(0, os.SEEK_END)
-        f.write(json.dumps(entry, sort_keys=True) + "\n")
+        f.write((json.dumps(entry, sort_keys=True) + "\n").encode("utf-8"))
         f.flush()
         os.fsync(f.fileno())
+
+        _append_cache[cache_key] = (next_id + 1, entry_hash)
 
     return entry
 
